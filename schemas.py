@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
-from models import TaskStatus, Priority, AgentStatus
 
 
 # --- Project ---
@@ -35,7 +34,7 @@ class ProjectOut(ProjectBase):
 class AgentBase(BaseModel):
     name: str
     role: str = ""
-    status: AgentStatus = AgentStatus.active
+    status: str = "active"
     current_task: str = ""
     main_files: str = ""
     project_id: Optional[int] = None
@@ -48,7 +47,7 @@ class AgentCreate(AgentBase):
 class AgentUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
-    status: Optional[AgentStatus] = None
+    status: Optional[str] = None
     current_task: Optional[str] = None
     main_files: Optional[str] = None
     project_id: Optional[int] = None
@@ -65,8 +64,8 @@ class AgentOut(AgentBase):
 class TaskBase(BaseModel):
     title: str
     description: str = ""
-    status: TaskStatus = TaskStatus.backlog
-    priority: Priority = Priority.medium
+    status: str = "backlog"
+    priority: str = "medium"
     assigned_to: str = ""
     project_id: int
     jira_key: Optional[str] = None
@@ -79,8 +78,8 @@ class TaskCreate(TaskBase):
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    status: Optional[TaskStatus] = None
-    priority: Optional[Priority] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
     assigned_to: Optional[str] = None
     jira_key: Optional[str] = None
 
@@ -95,14 +94,14 @@ class TaskOut(TaskBase):
 
 class TaskStatusUpdate(BaseModel):
     """Schema for updating only task status"""
-    status: TaskStatus
+    status: str
 
 
 class BulkTaskUpdate(BaseModel):
     """Schema for bulk updating tasks"""
     task_ids: list[int]
-    status: Optional[TaskStatus] = None
-    priority: Optional[Priority] = None
+    status: Optional[str] = None
+    priority: Optional[str] = None
     assigned_to: Optional[str] = None
 
 
