@@ -93,6 +93,19 @@ class TaskOut(TaskBase):
     model_config = {"from_attributes": True}
 
 
+class TaskStatusUpdate(BaseModel):
+    """Schema for updating only task status"""
+    status: TaskStatus
+
+
+class BulkTaskUpdate(BaseModel):
+    """Schema for bulk updating tasks"""
+    task_ids: list[int]
+    status: Optional[TaskStatus] = None
+    priority: Optional[Priority] = None
+    assigned_to: Optional[str] = None
+
+
 # --- Communication Log ---
 class CommLogBase(BaseModel):
     from_agent: str
