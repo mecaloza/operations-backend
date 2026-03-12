@@ -57,60 +57,10 @@ def kanban_board(project_id: int, db: Session = Depends(get_db)):
     return board
 
 
-@router.get("/{task_id}", response_model=TaskOut)
-def get_task(task_id: int, db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(404, "Task not found")
-    return task
-
-
 @router.post("/", response_model=TaskOut, status_code=201)
 def create_task(data: TaskCreate, db: Session = Depends(get_db)):
     task = Task(**data.model_dump(mode="json"))
     db.add(task)
-    db.commit()
-    db.refresh(task)
-    return task
-
-
-@router.patch("/{task_id}", response_model=TaskOut)
-def update_task(task_id: int, data: TaskUpdate, db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(404, "Task not found")
-    for k, v in data.model_dump(exclude_unset=True, mode="json").items():
-        setattr(task, k, v)
-    db.commit()
-    db.refresh(task)
-    return task
-
-
-@router.patch("/{task_id}/status", response_model=TaskOut)
-def update_task_status(
-    task_id: int, 
-    data: TaskStatusUpdate, 
-    db: Session = Depends(get_db)
-):
-    """
-    Optimized endpoint to update only task status.
-    Validates state transitions and auto-updates timestamp.
-    """
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(404, "Task not found")
-    
-    # Validate state transition
-    if not validate_status_transition(task.status, data.status):
-        raise HTTPException(
-            400, 
-            f"Invalid status transition: {task.status} → {data.status.value}"
-        )
-    
-    # Update status and timestamp
-    task.status = data.status.value
-    task.updated_at = datetime.now(timezone.utc)
-    
     db.commit()
     db.refresh(task)
     return task
@@ -172,6 +122,56 @@ def bulk_update_tasks(
         "total_requested": len(data.task_ids),
         "errors": errors if errors else None
     }
+
+
+@router.patch("/{task_id}/status", response_model=TaskOut)
+def update_task_status(
+    task_id: int, 
+    data: TaskStatusUpdate, 
+    db: Session = Depends(get_db)
+):
+    """
+    Optimized endpoint to update only task status.
+    Validates state transitions and auto-updates timestamp.
+    """
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(404, "Task not found")
+    
+    # Validate state transition
+    if not validate_status_transition(task.status, data.status):
+        raise HTTPException(
+            400, 
+            f"Invalid status transition: {task.status} → {data.status.value}"
+        )
+    
+    # Update status and timestamp
+    task.status = data.status.value
+    task.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+@router.get("/{task_id}", response_model=TaskOut)
+def get_task(task_id: int, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(404, "Task not found")
+    return task
+
+
+@router.patch("/{task_id}", response_model=TaskOut)
+def update_task(task_id: int, data: TaskUpdate, db: Session = Depends(get_db)):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(404, "Task not found")
+    for k, v in data.model_dump(exclude_unset=True, mode="json").items():
+        setattr(task, k, v)
+    db.commit()
+    db.refresh(task)
+    return task
 
 
 @router.delete("/{task_id}", status_code=204)
