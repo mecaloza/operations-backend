@@ -4,14 +4,14 @@ Base URL: `https://ops-backend-production-e8ce.up.railway.app`
 
 ## 🔥 Quick Status Update
 
-**Endpoint:** `PATCH /tasks/{task_id}/status`
+**Endpoint:** `PATCH /api/v1/tasks/{task_id}/status`
 
 Optimized endpoint for fast task status updates with automatic state transition validation.
 
 ### Request
 
 ```bash
-curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/tasks/123/status" \
+curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/api/v1/tasks/123/status" \
   -H "Content-Type: application/json" \
   -d '{"status": "in_progress"}'
 ```
@@ -62,14 +62,14 @@ curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/tasks/123/stat
 
 ## 🎯 Bulk Update Tasks
 
-**Endpoint:** `PATCH /tasks/bulk-update`
+**Endpoint:** `PATCH /api/v1/tasks/bulk-update`
 
 Update multiple tasks at once. Perfect for batch operations.
 
 ### Request
 
 ```bash
-curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/tasks/bulk-update" \
+curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/api/v1/tasks/bulk-update" \
   -H "Content-Type: application/json" \
   -d '{
     "task_ids": [123, 124, 125],
@@ -143,12 +143,12 @@ curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/tasks/bulk-upd
 
 ```bash
 # Move task to in_progress
-curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/tasks/1/status" \
+curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/api/v1/tasks/1/status" \
   -H "Content-Type: application/json" \
   -d '{"status": "in_progress"}'
 
 # Mark as done
-curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/tasks/1/status" \
+curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/api/v1/tasks/1/status" \
   -H "Content-Type: application/json" \
   -d '{"status": "done"}'
 ```
@@ -157,7 +157,7 @@ curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/tasks/1/status
 
 ```bash
 # Update multiple tasks to in_progress
-curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/tasks/bulk-update" \
+curl -X PATCH "https://ops-backend-production-e8ce.up.railway.app/api/v1/tasks/bulk-update" \
   -H "Content-Type: application/json" \
   -d '{
     "task_ids": [1, 2, 3],
