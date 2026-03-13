@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -36,6 +36,7 @@ def list_tasks(
     project_id: Optional[int] = None,
     status: Optional[TaskStatus] = None,
     assigned_to: Optional[str] = None,
+    include_old_done: bool = False,
     db: Session = Depends(get_db),
 ):
     q = db.query(Task)
@@ -45,6 +46,16 @@ def list_tasks(
         q = q.filter(Task.status == status.value)
     if assigned_to:
         q = q.filter(Task.assigned_to == assigned_to)
+    
+    # Filter out old "done" tasks (>5 days) unless explicitly requested
+    if not include_old_done:
+        five_days_ago = datetime.now(timezone.utc) - timedelta(days=5)
+        # Exclude done tasks older than 5 days
+        q = q.filter(
+            (Task.status != TaskStatus.done.value) | 
+            (Task.updated_at >= five_days_ago)
+        )
+    
     return q.order_by(Task.id).all()
 
 
