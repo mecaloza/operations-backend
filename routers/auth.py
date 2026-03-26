@@ -262,3 +262,44 @@ def require_leader_or_admin(current_user: User = Depends(get_current_user)):
             detail="Leader or Admin access required"
         )
     return current_user
+
+
+@router.post("/bootstrap")
+async def bootstrap_admin(db: Session = Depends(get_db)):
+    """
+    TEMPORAL: Crea usuario admin inicial si no existe ninguno
+    
+    Este endpoint NO requiere autenticación y solo funciona si:
+    1. No existe ningún usuario admin en la DB
+    2. Se ejecuta exactamente UNA vez
+    
+    **ELIMINAR en producción después del bootstrap inicial**
+    """
+    # Verificar si ya existe algún admin
+    existing_admin = db.query(User).filter(User.role == "admin").first()
+    if existing_admin:
+        raise HTTPException(
+            status_code=400,
+            detail="Admin user already exists. Bootstrap not needed."
+        )
+    
+    # Crear usuario admin inicial
+    admin_user = User(
+        username="padawan",
+        email="padawan@ops.dev",
+        full_name="Padawan (Bootstrap Admin)",
+        hashed_password=get_password_hash("admin123"),
+        role="admin",
+        team_id=None,  # Sin equipo por ahora
+        active=True
+    )
+    
+    db.add(admin_user)
+    db.commit()
+    db.refresh(admin_user)
+    
+    return {
+        "message": "✅ Bootstrap admin created successfully",
+        "username": admin_user.username,
+        "note": "DELETE /auth/bootstrap endpoint after first use"
+    }
