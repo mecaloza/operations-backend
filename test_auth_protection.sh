@@ -47,7 +47,7 @@ echo "   ✅ Login OK, token obtenido"
 
 # Test 4: /api/v1/projects con token debe ser 200
 echo "4️⃣  Testing /api/v1/projects con token (debe ser 200)..."
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+STATUS=$(curl -sL -o /dev/null -w "%{http_code}" \
     -H "Authorization: Bearer $TOKEN" \
     "$BASE_URL/api/v1/projects")
 
