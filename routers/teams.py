@@ -5,6 +5,7 @@ from typing import List
 from database import get_db
 from models import Team, User, Project
 from schemas import TeamCreate, TeamUpdate, TeamOut, UserOut
+from routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
@@ -14,7 +15,8 @@ def list_teams(
     skip: int = 0,
     limit: int = 100,
     project_id: int = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Listar equipos"""
     query = db.query(Team)
@@ -25,7 +27,11 @@ def list_teams(
 
 
 @router.post("", response_model=TeamOut, status_code=201)
-def create_team(team: TeamCreate, db: Session = Depends(get_db)):
+def create_team(
+    team: TeamCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Crear nuevo equipo"""
     # Validar que el proyecto existe
     project = db.query(Project).filter(Project.id == team.project_id).first()
@@ -45,7 +51,11 @@ def create_team(team: TeamCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{team_id}", response_model=TeamOut)
-def get_team(team_id: int, db: Session = Depends(get_db)):
+def get_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Detalle de equipo"""
     team = db.query(Team).filter(Team.id == team_id).first()
     if not team:
@@ -54,7 +64,12 @@ def get_team(team_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{team_id}", response_model=TeamOut)
-def update_team(team_id: int, team_update: TeamUpdate, db: Session = Depends(get_db)):
+def update_team(
+    team_id: int,
+    team_update: TeamUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Actualizar equipo"""
     db_team = db.query(Team).filter(Team.id == team_id).first()
     if not db_team:
@@ -77,7 +92,11 @@ def update_team(team_id: int, team_update: TeamUpdate, db: Session = Depends(get
 
 
 @router.delete("/{team_id}", status_code=204)
-def delete_team(team_id: int, db: Session = Depends(get_db)):
+def delete_team(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Soft delete de equipo (elimina físicamente)"""
     db_team = db.query(Team).filter(Team.id == team_id).first()
     if not db_team:
@@ -97,7 +116,11 @@ def delete_team(team_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{team_id}/members", response_model=List[UserOut])
-def get_team_members(team_id: int, db: Session = Depends(get_db)):
+def get_team_members(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Listar miembros del equipo"""
     team = db.query(Team).filter(Team.id == team_id).first()
     if not team:

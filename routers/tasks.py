@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Task, TaskStatus
+from models import Task, TaskStatus, User
 from schemas import TaskCreate, TaskUpdate, TaskOut, TaskStatusUpdate, BulkTaskUpdate
+from routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -38,6 +39,7 @@ def list_tasks(
     assigned_to: Optional[str] = None,
     include_old_done: bool = False,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     q = db.query(Task)
     if project_id:
@@ -60,7 +62,11 @@ def list_tasks(
 
 
 @router.get("/kanban/{project_id}")
-def kanban_board(project_id: int, db: Session = Depends(get_db)):
+def kanban_board(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     tasks = db.query(Task).filter(Task.project_id == project_id).all()
     board = {s.value: [] for s in TaskStatus}
     for t in tasks:
@@ -69,7 +75,11 @@ def kanban_board(project_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/", response_model=TaskOut, status_code=201)
-def create_task(data: TaskCreate, db: Session = Depends(get_db)):
+def create_task(
+    data: TaskCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     task = Task(**data.model_dump(mode="json"))
     db.add(task)
     db.commit()
@@ -80,7 +90,8 @@ def create_task(data: TaskCreate, db: Session = Depends(get_db)):
 @router.patch("/bulk-update", response_model=dict)
 def bulk_update_tasks(
     data: BulkTaskUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Bulk update multiple tasks at once.
@@ -139,7 +150,8 @@ def bulk_update_tasks(
 def update_task_status(
     task_id: int, 
     data: TaskStatusUpdate, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Optimized endpoint to update only task status.
@@ -166,7 +178,11 @@ def update_task_status(
 
 
 @router.get("/{task_id}", response_model=TaskOut)
-def get_task(task_id: int, db: Session = Depends(get_db)):
+def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(404, "Task not found")
@@ -174,7 +190,12 @@ def get_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{task_id}", response_model=TaskOut)
-def update_task(task_id: int, data: TaskUpdate, db: Session = Depends(get_db)):
+def update_task(
+    task_id: int,
+    data: TaskUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(404, "Task not found")
@@ -186,7 +207,11 @@ def update_task(task_id: int, data: TaskUpdate, db: Session = Depends(get_db)):
 
 
 @router.delete("/{task_id}", status_code=204)
-def delete_task(task_id: int, db: Session = Depends(get_db)):
+def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(404, "Task not found")

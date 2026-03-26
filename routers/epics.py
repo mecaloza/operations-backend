@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from database import get_db
-from models import Epic, EpicTask, Project, EpicProgressHistory
+from models import Epic, EpicTask, Project, EpicProgressHistory, User
 from schemas import (
     EpicCreate,
     EpicUpdate,
@@ -15,6 +15,7 @@ from schemas import (
     SprintEpic,
     SprintEpicTask,
 )
+from routers.auth import get_current_user, require_admin
 
 router = APIRouter(tags=["Epics"])
 
@@ -69,7 +70,9 @@ def list_epics(
 
 
 @router.post("/epics", response_model=EpicOut, status_code=201)
-def create_epic(epic: EpicCreate, db: Session = Depends(get_db)):
+def create_epic(epic: EpicCreate, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Crea una nueva épica."""
     # Validar que el proyecto existe
     project = db.query(Project).filter(Project.id == epic.project_id).first()
@@ -84,7 +87,9 @@ def create_epic(epic: EpicCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/epics/{epic_id}", response_model=EpicOut)
-def get_epic(epic_id: int, db: Session = Depends(get_db)):
+def get_epic(epic_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Obtiene una épica por ID."""
     epic = db.query(Epic).filter(Epic.id == epic_id, Epic.deleted == False).first()
     if not epic:
@@ -93,7 +98,9 @@ def get_epic(epic_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/epics/{epic_id}", response_model=EpicOut)
-def update_epic(epic_id: int, updates: EpicUpdate, db: Session = Depends(get_db)):
+def update_epic(epic_id: int, updates: EpicUpdate, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Actualiza una épica."""
     epic = db.query(Epic).filter(Epic.id == epic_id, Epic.deleted == False).first()
     if not epic:
@@ -108,7 +115,9 @@ def update_epic(epic_id: int, updates: EpicUpdate, db: Session = Depends(get_db)
 
 
 @router.delete("/epics/{epic_id}", status_code=204)
-def delete_epic(epic_id: int, db: Session = Depends(get_db)):
+def delete_epic(epic_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Soft delete de una épica."""
     epic = db.query(Epic).filter(Epic.id == epic_id, Epic.deleted == False).first()
     if not epic:
@@ -123,7 +132,9 @@ def delete_epic(epic_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/epics/{epic_id}/tasks", response_model=List[EpicTaskOut])
-def list_epic_tasks(epic_id: int, db: Session = Depends(get_db)):
+def list_epic_tasks(epic_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Lista todas las sub-tareas de una épica."""
     epic = db.query(Epic).filter(Epic.id == epic_id, Epic.deleted == False).first()
     if not epic:
@@ -140,7 +151,8 @@ def list_epic_tasks(epic_id: int, db: Session = Depends(get_db)):
 
 @router.post("/epics/{epic_id}/tasks", response_model=EpicTaskOut, status_code=201)
 def create_epic_task(
-    epic_id: int, task: EpicTaskCreate, db: Session = Depends(get_db)
+    epic_id: int, task: EpicTaskCreate, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Crea una sub-tarea dentro de una épica."""
     epic = db.query(Epic).filter(Epic.id == epic_id, Epic.deleted == False).first()
@@ -160,7 +172,8 @@ def create_epic_task(
 
 @router.patch("/epic-tasks/{task_id}", response_model=EpicTaskOut)
 def update_epic_task(
-    task_id: int, updates: EpicTaskUpdate, db: Session = Depends(get_db)
+    task_id: int, updates: EpicTaskUpdate, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Actualiza una sub-tarea (%, estado, asignado)."""
     task = db.query(EpicTask).filter(EpicTask.id == task_id, EpicTask.deleted == False).first()
@@ -181,7 +194,9 @@ def update_epic_task(
 
 
 @router.delete("/epic-tasks/{task_id}", status_code=204)
-def delete_epic_task(task_id: int, db: Session = Depends(get_db)):
+def delete_epic_task(task_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Soft delete de una sub-tarea."""
     task = db.query(EpicTask).filter(EpicTask.id == task_id, EpicTask.deleted == False).first()
     if not task:
@@ -201,7 +216,9 @@ def delete_epic_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/projects/{project_id}/sprint-report", response_model=SprintReport)
-def get_sprint_report(project_id: int, db: Session = Depends(get_db)):
+def get_sprint_report(project_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Reporte completo de avance: épicas + sub-tareas + % total."""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:

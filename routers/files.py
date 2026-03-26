@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
+
+from models import User
+from routers.auth import get_current_user
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
@@ -15,7 +18,11 @@ def _should_ignore(name: str) -> bool:
 
 
 @router.get("/tree/{project_slug}")
-def file_tree(project_slug: str, depth: int = Query(3, ge=1, le=6)):
+def file_tree(
+    project_slug: str,
+    depth: int = Query(3, ge=1, le=6),
+    current_user: User = Depends(get_current_user)
+):
     project_dir = WORKSPACE_ROOT / "projects" / project_slug.replace("-", "/")
     if not project_dir.exists():
         alt = WORKSPACE_ROOT / "projects" / project_slug
@@ -49,7 +56,10 @@ def file_tree(project_slug: str, depth: int = Query(3, ge=1, le=6)):
 
 
 @router.get("/read")
-def read_file(path: str = Query(..., description="Relative path from workspace root")):
+def read_file(
+    path: str = Query(..., description="Relative path from workspace root"),
+    current_user: User = Depends(get_current_user)
+):
     full = WORKSPACE_ROOT / path
     if not full.exists() or not full.is_file():
         raise HTTPException(404, "File not found")

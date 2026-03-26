@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Task, TaskStatus, Priority, Project
+from models import Task, TaskStatus, Priority, Project, User
+from routers.auth import require_admin
 
 router = APIRouter(prefix="/jira", tags=["Jira Sync"])
 
@@ -57,7 +58,11 @@ JIRA_PRIORITY_MAP = {
 
 
 @router.post("/sync/{project_slug}")
-async def sync_jira(project_slug: str, db: Session = Depends(get_db)):
+async def sync_jira(
+    project_slug: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     cfg = _load_jira_config()
     project = db.query(Project).filter(Project.slug == project_slug).first()
     if not project:

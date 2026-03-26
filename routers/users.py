@@ -5,6 +5,7 @@ from typing import List
 from database import get_db
 from models import User, Agent, UserRole
 from schemas import UserCreate, UserUpdate, UserOut, UserWithAgents, AgentOut
+from routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -14,7 +15,8 @@ def list_users(
     skip: int = 0,
     limit: int = 100,
     active_only: bool = True,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """Listar usuarios"""
     query = db.query(User)
@@ -25,7 +27,11 @@ def list_users(
 
 
 @router.post("", response_model=UserOut, status_code=201)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+def create_user(
+    user: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Crear nuevo usuario"""
     # Validar role
     if user.role not in [r.value for r in UserRole]:
@@ -55,7 +61,11 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{user_id}", response_model=UserOut)
-def get_user(user_id: int, db: Session = Depends(get_db)):
+def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Detalle de usuario"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -64,7 +74,12 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{user_id}", response_model=UserOut)
-def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
+def update_user(
+    user_id: int,
+    user_update: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Actualizar usuario"""
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
@@ -98,7 +113,11 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: int, db: Session = Depends(get_db)):
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Soft delete de usuario"""
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
@@ -118,7 +137,12 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{user_id}/assign-agent/{agent_id}", response_model=UserOut)
-def assign_agent(user_id: int, agent_id: int, db: Session = Depends(get_db)):
+def assign_agent(
+    user_id: int,
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Asignar agente a usuario"""
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
@@ -139,7 +163,12 @@ def assign_agent(user_id: int, agent_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{user_id}/unassign-agent/{agent_id}", status_code=204)
-def unassign_agent(user_id: int, agent_id: int, db: Session = Depends(get_db)):
+def unassign_agent(
+    user_id: int,
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Desasignar agente de usuario"""
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
@@ -159,7 +188,11 @@ def unassign_agent(user_id: int, agent_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{user_id}/agents", response_model=List[AgentOut])
-def get_user_agents(user_id: int, db: Session = Depends(get_db)):
+def get_user_agents(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Listar agentes asignados a usuario"""
     db_user = db.query(User).options(joinedload(User.assigned_agents)).filter(User.id == user_id).first()
     if not db_user:

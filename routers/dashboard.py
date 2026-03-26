@@ -3,13 +3,17 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Agent, AgentStatus, Project, Task, TaskStatus
+from models import Agent, AgentStatus, Project, Task, TaskStatus, User
+from routers.auth import get_current_user
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
 
 @router.get("/stats")
-def dashboard_stats(db: Session = Depends(get_db)):
+def dashboard_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     total_projects = db.query(func.count(Project.id)).scalar() or 0
     total_agents = (
         db.query(func.count(Agent.id))

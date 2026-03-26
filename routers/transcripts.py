@@ -6,7 +6,7 @@ import io
 from datetime import datetime, timezone
 
 from database import get_db
-from models import Transcript, TranscriptVersion, Task, Epic, Project
+from models import Transcript, TranscriptVersion, Task, Epic, Project, User
 from schemas import (
     TranscriptCreate,
     TranscriptUpdate,
@@ -14,6 +14,7 @@ from schemas import (
     TranscriptVersionOut,
     TranscriptQuery
 )
+from routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
 
@@ -58,7 +59,8 @@ def list_transcripts(
     epic_id: Optional[int] = None,
     tags: Optional[str] = None,
     created_by: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Lista transcripts con filtros opcionales"""
     query = db.query(Transcript).filter(Transcript.is_latest == True)
@@ -91,7 +93,9 @@ def list_transcripts(
 
 
 @router.post("", response_model=TranscriptOut, status_code=201)
-def create_transcript(data: TranscriptCreate, db: Session = Depends(get_db)):
+def create_transcript(data: TranscriptCreate, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Crea un nuevo transcript"""
     _validate_transcript_data(data, db)
     
@@ -135,7 +139,9 @@ def create_transcript(data: TranscriptCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{transcript_id}", response_model=TranscriptOut)
-def get_transcript(transcript_id: int, db: Session = Depends(get_db)):
+def get_transcript(transcript_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Obtiene detalle de un transcript"""
     transcript = db.query(Transcript).options(
         joinedload(Transcript.task),
@@ -161,7 +167,8 @@ def update_transcript(
     data: TranscriptUpdate,
     changed_by: str,
     change_summary: Optional[str] = "",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Actualiza transcript (crea nueva versión automáticamente)"""
     transcript = db.query(Transcript).filter(
@@ -218,7 +225,9 @@ def update_transcript(
 
 
 @router.delete("/{transcript_id}")
-def delete_transcript(transcript_id: int, db: Session = Depends(get_db)):
+def delete_transcript(transcript_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Marca transcript como no-latest (soft delete)"""
     transcript = db.query(Transcript).filter(Transcript.id == transcript_id).first()
     if not transcript:
@@ -231,7 +240,9 @@ def delete_transcript(transcript_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{transcript_id}/versions", response_model=list[TranscriptVersionOut])
-def get_transcript_versions(transcript_id: int, db: Session = Depends(get_db)):
+def get_transcript_versions(transcript_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Obtiene historial de versiones de un transcript"""
     transcript = db.query(Transcript).filter(Transcript.id == transcript_id).first()
     if not transcript:
@@ -245,7 +256,9 @@ def get_transcript_versions(transcript_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{transcript_id}/download")
-def download_transcript(transcript_id: int, db: Session = Depends(get_db)):
+def download_transcript(transcript_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Descarga transcript como archivo .md"""
     transcript = db.query(Transcript).filter(
         Transcript.id == transcript_id,
@@ -307,7 +320,9 @@ async def upload_transcript(
 
 
 @router.get("/by-task/{task_id}", response_model=list[TranscriptOut])
-def get_task_transcripts(task_id: int, db: Session = Depends(get_db)):
+def get_task_transcripts(task_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Lista transcripts de una tarea específica"""
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -332,7 +347,9 @@ def get_task_transcripts(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/by-epic/{epic_id}", response_model=list[TranscriptOut])
-def get_epic_transcripts(epic_id: int, db: Session = Depends(get_db)):
+def get_epic_transcripts(epic_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Lista transcripts de una épica específica"""
     epic = db.query(Epic).filter(Epic.id == epic_id).first()
     if not epic:
@@ -357,7 +374,9 @@ def get_epic_transcripts(epic_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/by-project/{project_id}", response_model=list[TranscriptOut])
-def get_project_transcripts(project_id: int, db: Session = Depends(get_db)):
+def get_project_transcripts(project_id: int, db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Lista transcripts de un proyecto específico"""
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
