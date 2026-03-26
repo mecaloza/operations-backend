@@ -113,7 +113,7 @@ class Agent(Base):
     current_task = Column(String(300), default="")
     main_files = Column(Text, default="")
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
-    assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    # assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # TODO: Migración pendiente
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="agents")
