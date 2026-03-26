@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Task, TaskStatus, Priority, Project
 
-router = APIRouter(prefix="/jira", tags=["jira"])
+router = APIRouter(prefix="/jira", tags=["Jira Sync"])
 
 SECRETS_PATH = Path(os.getenv("SECRETS_PATH", Path(__file__).resolve().parent.parent / ".secrets" / "jira.env"))
 

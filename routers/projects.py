@@ -26,7 +26,13 @@ def get_project(project_id: int, db: Session = Depends(get_db)):
     return proj
 
 
-@router.post("/", response_model=ProjectOut, status_code=201)
+@router.post(
+    "/",
+    response_model=ProjectOut,
+    status_code=201,
+    summary="Crear proyecto",
+    description="Crea un nuevo proyecto. El slug debe ser único y se usa para referencias en filesystem.",
+)
 def create_project(data: ProjectCreate, db: Session = Depends(get_db)):
     proj = Project(**data.model_dump())
     db.add(proj)
@@ -54,3 +60,4 @@ def delete_project(project_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Project not found")
     db.delete(proj)
     db.commit()
+

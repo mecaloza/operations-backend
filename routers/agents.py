@@ -26,7 +26,13 @@ def get_agent(agent_id: int, db: Session = Depends(get_db)):
     return agent
 
 
-@router.post("/", response_model=AgentOut, status_code=201)
+@router.post(
+    "/",
+    response_model=AgentOut,
+    status_code=201,
+    summary="Crear agente",
+    description="Registra un nuevo agente AI en el sistema. El nombre debe ser único.",
+)
 def create_agent(data: AgentCreate, db: Session = Depends(get_db)):
     agent = Agent(**data.model_dump(mode="json"))
     db.add(agent)

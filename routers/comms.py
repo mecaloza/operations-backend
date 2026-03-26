@@ -8,7 +8,7 @@ from database import get_db
 from models import CommunicationLog
 from schemas import CommLogCreate, CommLogOut
 
-router = APIRouter(prefix="/comms", tags=["communication"])
+router = APIRouter(prefix="/comms", tags=["Communication"])
 
 
 @router.get("/", response_model=list[CommLogOut])

@@ -8,7 +8,7 @@ from database import get_db
 from models import Task, TaskStatus
 from schemas import TaskCreate, TaskUpdate, TaskOut, TaskStatusUpdate, BulkTaskUpdate
 
-router = APIRouter(prefix="/tasks", tags=["tasks"])
+router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
 # Valid state transitions for task status
