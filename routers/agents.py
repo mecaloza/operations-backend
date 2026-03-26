@@ -14,8 +14,7 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 @router.get("/", response_model=list[AgentOut])
 def list_agents(
     project_id: Optional[int] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     q = db.query(Agent)
     if project_id:

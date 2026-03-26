@@ -38,8 +38,7 @@ def list_tasks(
     status: Optional[TaskStatus] = None,
     assigned_to: Optional[str] = None,
     include_old_done: bool = False,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     q = db.query(Task)
     if project_id:

@@ -14,8 +14,7 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 @router.get("/", response_model=list[ProjectOut])
 def list_projects(
     status: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     q = db.query(Project)
     if status:

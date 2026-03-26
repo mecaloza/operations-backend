@@ -47,8 +47,7 @@ def create_log(
 @router.get("/timeline", response_model=list[CommLogOut])
 def timeline(
     limit: int = Query(100, le=500),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     return (
         db.query(CommunicationLog)
