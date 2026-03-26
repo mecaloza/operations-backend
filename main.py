@@ -279,7 +279,7 @@ Este backend es el **único source of truth** para todos los proyectos del ecosi
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://operations-dashboard-nine.vercel.app", "https://operations-dashboard-nine-mecalozas-projects.vercel.app"],
+    allow_origins=["*"],  # TEMPORAL - debugging CORS issue (2026-03-26)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
