@@ -303,3 +303,27 @@ async def bootstrap_admin(db: Session = Depends(get_db)):
         "username": admin_user.username,
         "note": "DELETE /auth/bootstrap endpoint after first use"
     }
+
+
+@router.post("/reset-admin-password")
+async def reset_admin_password(db: Session = Depends(get_db)):
+    """
+    TEMPORAL: Resetea password del usuario admin 'padawan' a 'admin123'
+    
+    Este endpoint NO requiere autenticación.
+    **ELIMINAR inmediatamente después de uso**
+    """
+    padawan = db.query(User).filter(User.username == "padawan").first()
+    if not padawan:
+        raise HTTPException(404, "User 'padawan' not found")
+    
+    # Force update password to bcrypt hash of "admin123"
+    padawan.hashed_password = get_password_hash("admin123")
+    db.commit()
+    
+    return {
+        "message": "✅ Password reset successfully",
+        "username": "padawan",
+        "new_password": "admin123",
+        "note": "DELETE this endpoint immediately"
+    }
