@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 
 
@@ -82,14 +82,20 @@ class TaskUpdate(BaseModel):
     priority: Optional[str] = None
     assigned_to: Optional[str] = None
     jira_key: Optional[str] = None
+    task_progress: Optional[float] = None
 
 
 class TaskOut(TaskBase):
     id: int
+    task_progress: float = 0.0
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# Alias para compatibilidad con spec
+TaskResponse = TaskOut
 
 
 class TaskStatusUpdate(BaseModel):
@@ -124,13 +130,17 @@ class CommLogOut(CommLogBase):
     model_config = {"from_attributes": True}
 
 
-# --- Epic ---
+# --- Epic (NEW SPEC: M2M con tareas existentes) ---
 class EpicBase(BaseModel):
     title: str
-    description: str = ""
+    description: Optional[str] = None
     project_id: int
-    target_progress: float = 100.0
-    status: str = "active"
+    priority: str = "medium"
+    progress: float = 0.0
+    status: str = "not_started"
+    goal: Optional[str] = None
+    start_date: Optional[date] = None
+    target_date: Optional[date] = None
 
 
 class EpicCreate(EpicBase):
@@ -140,69 +150,42 @@ class EpicCreate(EpicBase):
 class EpicUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    target_progress: Optional[float] = None
-    status: Optional[str] = None
-
-
-class EpicOut(EpicBase):
-    id: int
-    calculated_progress: float
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-# --- Epic Task ---
-class EpicTaskBase(BaseModel):
-    title: str
-    progress: float = 0.0
-    assigned_to: str = "Sin asignar"
-    status: str = "backlog"
-
-
-class EpicTaskCreate(EpicTaskBase):
-    pass
-
-
-class EpicTaskUpdate(BaseModel):
-    title: Optional[str] = None
+    priority: Optional[str] = None
     progress: Optional[float] = None
-    assigned_to: Optional[str] = None
     status: Optional[str] = None
+    goal: Optional[str] = None
+    start_date: Optional[date] = None
+    target_date: Optional[date] = None
 
 
-class EpicTaskOut(EpicTaskBase):
+class EpicResponse(EpicBase):
     id: int
-    epic_id: int
     created_at: datetime
     updated_at: datetime
+    task_count: Optional[int] = 0
 
     model_config = {"from_attributes": True}
 
 
-# --- Sprint Report ---
-class SprintEpicTask(BaseModel):
-    title: str
-    progress: float
-    assigned_to: str
-    status: str
+class EpicDetailResponse(EpicResponse):
+    tasks: List["TaskResponse"] = []
+    evaluation_points: List["EvaluationPointResponse"] = []
+    avg_evaluation_progress: Optional[float] = None
+
+    model_config = {"from_attributes": True}
 
 
-class SprintEpic(BaseModel):
-    id: int
-    title: str
-    progress: float
-    target_progress: float
-    status: str
-    tasks: list[SprintEpicTask]
+# Alias para compatibilidad
+EpicOut = EpicResponse
 
 
-class SprintReport(BaseModel):
-    project_id: int
-    project_name: str
-    total_progress: float
-    epics: list[SprintEpic]
+# --- Epic Task Assignment ---
+class AddTasksToEpicRequest(BaseModel):
+    task_ids: List[int]
+
+
+class AddEpicsToTaskRequest(BaseModel):
+    epic_ids: List[int]
 
 
 # --- AgentAuth ---
@@ -360,3 +343,40 @@ class UserWithAgents(UserOut):
     assigned_agents: List["AgentOut"] = []
 
     model_config = {"from_attributes": True}
+
+
+# --- Evaluation Points ---
+class EvaluationPointCreate(BaseModel):
+    category: str
+    description: Optional[str] = None
+    assigned_to: int
+    progress: float = 0.0
+    weight: float = 1.0
+
+
+class EvaluationPointUpdate(BaseModel):
+    category: Optional[str] = None
+    description: Optional[str] = None
+    assigned_to: Optional[int] = None
+    progress: Optional[float] = None
+    weight: Optional[float] = None
+
+
+class EvaluationPointResponse(BaseModel):
+    id: int
+    epic_id: int
+    category: str
+    description: Optional[str]
+    assigned_to: int
+    assigned_to_name: Optional[str] = None  # Joined from users
+    progress: float
+    weight: float
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EvaluationPointBulkUpdate(BaseModel):
+    id: int
+    progress: float

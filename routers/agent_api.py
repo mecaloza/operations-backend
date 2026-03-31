@@ -10,10 +10,10 @@ from typing import Optional, List
 import uuid
 
 from database import get_db
-from models import AgentAuth, Task, Project, Epic, EpicTask, Transcript
+from models import AgentAuth, Task, Project, Epic, Transcript, EpicTaskAssignment
 from schemas import (
     AgentAuthCreate, AgentAuthOut, AgentAuthUpdate,
-    TaskOut, ProjectOut, EpicTaskOut,
+    TaskOut, ProjectOut, TaskResponse,
     TaskStatusUpdate, TranscriptOut, TranscriptCreate
 )
 
@@ -284,14 +284,14 @@ def get_projects(
 
 # --- Epic Endpoints ---
 
-@router.get("/epics/{epic_id}/tasks", response_model=List[EpicTaskOut])
+@router.get("/epics/{epic_id}/tasks", response_model=List[TaskResponse])
 def get_epic_tasks(
     epic_id: int,
     agent_auth: AgentAuth = Depends(get_agent_auth),
     db: Session = Depends(get_db)
 ):
     """
-    Obtener sub-tareas de una épica
+    Obtener tareas asociadas a una épica (M2M)
     Requiere: read:epics
     """
     if not check_permission(agent_auth, "read:epics"):
@@ -307,10 +307,13 @@ def get_epic_tasks(
             detail=f"Epic {epic_id} not found"
         )
     
-    tasks = db.query(EpicTask).filter(
-        EpicTask.epic_id == epic_id,
-        EpicTask.deleted == False
-    ).all()
+    # Obtener tareas asociadas vía M2M
+    tasks = (
+        db.query(Task)
+        .join(EpicTaskAssignment, EpicTaskAssignment.task_id == Task.id)
+        .filter(EpicTaskAssignment.epic_id == epic_id)
+        .all()
+    )
     
     return tasks
 

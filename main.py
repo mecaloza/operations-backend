@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import engine, SessionLocal
 from models import Base, Project, Agent, AgentAuth, Task, Transcript, TranscriptVersion, Team, User
 
-from routers import projects, agents, tasks, comms, files, jira_sync, dashboard, epics, agent_api, transcripts, users, teams, auth
+from routers import projects, agents, tasks, comms, files, jira_sync, dashboard, epics, agent_api, transcripts, users, teams, auth, evaluation_points
 
 
 SEED_PROJECTS = [
@@ -229,13 +229,31 @@ Crear un sistema completo para gestionar transcripts (documentación markdown) v
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
+    import logging
+    logger = logging.getLogger("uvicorn")
+    
     try:
-        _seed(db)
-    finally:
-        db.close()
+        logger.info("Creating database tables...")
+        Base.metadata.create_all(bind=engine)
+        logger.info("Database tables created successfully")
+        
+        logger.info("Starting database seeding...")
+        db = SessionLocal()
+        try:
+            _seed(db)
+            logger.info("Database seeding completed successfully")
+        except Exception as e:
+            logger.error(f"Error during seeding: {e}", exc_info=True)
+            # No fallar si el seed falla (datos ya pueden existir)
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Error during startup: {e}", exc_info=True)
+        raise
+    
+    logger.info("Application startup complete")
     yield
+    logger.info("Application shutdown")
 
 
 app = FastAPI(
@@ -294,6 +312,7 @@ app.include_router(comms.router, prefix="/api/v1")
 app.include_router(files.router, prefix="/api/v1")
 app.include_router(jira_sync.router, prefix="/api/v1")
 app.include_router(epics.router, prefix="/api/v1")
+app.include_router(evaluation_points.router)
 app.include_router(agent_api.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(teams.router, prefix="/api/v1")

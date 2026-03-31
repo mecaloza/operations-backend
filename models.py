@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Boolean, Index, Table
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float, Boolean, Index, Table, Date, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import enum
@@ -28,9 +28,9 @@ class AgentStatus(str, enum.Enum):
 
 
 class EpicStatus(str, enum.Enum):
-    active = "active"
-    completed = "completed"
-    blocked = "blocked"
+    not_started = "not_started"
+    in_progress = "in_progress"
+    done = "done"
 
 
 class EpicTaskStatus(str, enum.Enum):
@@ -69,6 +69,7 @@ class Project(Base):
     agents = relationship("Agent", back_populates="project")
     tasks = relationship("Task", back_populates="project")
     teams = relationship("Team", back_populates="project")
+    epics = relationship("Epic", back_populates="project")
 
 
 class Team(Base):
@@ -131,10 +132,12 @@ class Task(Base):
     assigned_to = Column(String(100), default="")
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
     jira_key = Column(String(50), nullable=True)
+    task_progress = Column(Float, default=0.0)  # % manual (0.0 - 100.0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     project = relationship("Project", back_populates="tasks")
+    epic_assignments = relationship("EpicTaskAssignment", back_populates="task", cascade="all, delete-orphan")
 
 
 class CommunicationLog(Base):
@@ -153,44 +156,37 @@ class Epic(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(500), nullable=False)
-    description = Column(Text, default="")
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
-    target_progress = Column(Float, default=100.0)  # Meta objetivo (% target)
-    calculated_progress = Column(Float, default=0.0)  # Auto-calculado desde sub-tareas
-    status = Column(String(50), default=EpicStatus.active.value)
-    deleted = Column(Boolean, default=False)  # Soft delete
+    description = Column(Text)
+    project_id = Column(Integer, ForeignKey("projects.id"))
+    priority = Column(String(20), default="medium")  # low/medium/high/critical
+    progress = Column(Float, default=0.0)  # % manual (0.0 - 100.0)
+    status = Column(String(50), default="not_started")  # not_started/in_progress/done
+    goal = Column(Text)
+    start_date = Column(Date, nullable=True)
+    target_date = Column(Date, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    project = relationship("Project", backref="epics")
-    tasks = relationship("EpicTask", back_populates="epic", cascade="all, delete-orphan")
+    # Relationships
+    project = relationship("Project", back_populates="epics")
+    task_assignments = relationship("EpicTaskAssignment", back_populates="epic", cascade="all, delete-orphan")
+    evaluation_points = relationship("EpicEvaluationPoint", back_populates="epic", cascade="all, delete-orphan")
 
 
-class EpicTask(Base):
-    __tablename__ = "epic_tasks"
+class EpicTaskAssignment(Base):
+    __tablename__ = "epic_task_assignments"
 
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(500), nullable=False)
-    epic_id = Column(Integer, ForeignKey("epics.id"), nullable=False)
-    progress = Column(Float, default=0.0)  # % completitud (0-100)
-    assigned_to = Column(String(200), default="Sin asignar")  # Agente o humano
-    status = Column(String(50), default=EpicTaskStatus.backlog.value)
-    deleted = Column(Boolean, default=False)  # Soft delete
+    epic_id = Column(Integer, ForeignKey("epics.id", ondelete="CASCADE"))
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    epic = relationship("Epic", back_populates="tasks")
+    # Relationships
+    epic = relationship("Epic", back_populates="task_assignments")
+    task = relationship("Task", back_populates="epic_assignments")
 
-
-class EpicProgressHistory(Base):
-    __tablename__ = "epic_progress_history"
-
-    id = Column(Integer, primary_key=True, index=True)
-    epic_id = Column(Integer, ForeignKey("epics.id"), nullable=False)
-    progress = Column(Float, nullable=False)  # Snapshot de % en ese momento
-    snapshot_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    epic = relationship("Epic", backref="progress_history")
+    # Unique constraint
+    __table_args__ = (UniqueConstraint('epic_id', 'task_id', name='uq_epic_task'),)
 
 
 class AgentAuth(Base):
@@ -248,3 +244,46 @@ class TranscriptVersion(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     transcript = relationship("Transcript", back_populates="versions")
+
+
+class EpicEvaluationPoint(Base):
+    __tablename__ = "epic_evaluation_points"
+
+    id = Column(Integer, primary_key=True, index=True)
+    epic_id = Column(Integer, ForeignKey("epics.id", ondelete="CASCADE"), nullable=False)
+    category = Column(String(100), nullable=False)  # Backend, Admin, Landing, etc.
+    description = Column(Text)  # Qué involucra
+    assigned_to = Column(Integer, ForeignKey("users.id"))  # Responsable
+    progress = Column(Float, default=0.0)  # % actual (0.00 - 100.00)
+    weight = Column(Float, default=1.0)  # Para promedio ponderado (futuro)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    epic = relationship("Epic", back_populates="evaluation_points")
+    user = relationship("User")
+
+    # Indexes
+    __table_args__ = (
+        Index('idx_evaluation_points_epic', 'epic_id'),
+        Index('idx_evaluation_points_user', 'assigned_to'),
+    )
+
+
+# TODO: Descomentar cuando exista tabla 'dailys'
+# class DailyEvaluationPointProgress(Base):
+#     __tablename__ = "daily_evaluation_point_progress"
+#
+#     id = Column(Integer, primary_key=True, index=True)
+#     daily_id = Column(Integer, ForeignKey("dailys.id", ondelete="CASCADE"), nullable=False)
+#     evaluation_point_id = Column(Integer, ForeignKey("epic_evaluation_points.id", ondelete="CASCADE"), nullable=False)
+#     previous_progress = Column(Float)
+#     new_progress = Column(Float)
+#     delta = Column(Float)
+#     notes = Column(Text)
+#     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+#
+#     # Unique constraint
+#     __table_args__ = (
+#         UniqueConstraint('daily_id', 'evaluation_point_id', name='uq_daily_eval_point'),
+#     )

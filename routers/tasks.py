@@ -5,8 +5,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Task, TaskStatus, User
-from schemas import TaskCreate, TaskUpdate, TaskOut, TaskStatusUpdate, BulkTaskUpdate
+from models import Task, TaskStatus, User, Epic, EpicTaskAssignment
+from schemas import (
+    TaskCreate,
+    TaskUpdate,
+    TaskOut,
+    TaskStatusUpdate,
+    BulkTaskUpdate,
+    AddEpicsToTaskRequest,
+    EpicResponse,
+)
 from routers.auth import get_current_user, require_admin
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
@@ -216,3 +224,96 @@ def delete_task(
         raise HTTPException(404, "Task not found")
     db.delete(task)
     db.commit()
+
+
+# ========== ASOCIACIÓN TAREAS <-> ÉPICAS ==========
+
+
+@router.post("/{task_id}/epics", status_code=201)
+def add_task_to_epics(
+    task_id: int,
+    request: AddEpicsToTaskRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Asociar tarea a múltiples épicas"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    added_count = 0
+    errors = []
+
+    for epic_id in request.epic_ids:
+        # Verificar que la épica existe
+        epic = db.query(Epic).filter(Epic.id == epic_id).first()
+        if not epic:
+            errors.append(f"Epic {epic_id} not found")
+            continue
+
+        # Verificar que no exista ya la asociación
+        existing = (
+            db.query(EpicTaskAssignment)
+            .filter(
+                EpicTaskAssignment.epic_id == epic_id,
+                EpicTaskAssignment.task_id == task_id,
+            )
+            .first()
+        )
+        if existing:
+            errors.append(f"Task {task_id} already assigned to epic {epic_id}")
+            continue
+
+        # Crear asociación
+        assignment = EpicTaskAssignment(epic_id=epic_id, task_id=task_id)
+        db.add(assignment)
+        added_count += 1
+
+    db.commit()
+
+    return {
+        "message": f"Added task {task_id} to {added_count} epics",
+        "added_count": added_count,
+        "errors": errors if errors else None,
+    }
+
+
+@router.get("/{task_id}/epics", response_model=list[EpicResponse])
+def get_task_epics(
+    task_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Listar épicas de una tarea"""
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    epics = (
+        db.query(Epic)
+        .join(EpicTaskAssignment, EpicTaskAssignment.epic_id == Epic.id)
+        .filter(EpicTaskAssignment.task_id == task_id)
+        .all()
+    )
+
+    # Agregar task_count a cada épica
+    result = []
+    for epic in epics:
+        epic_dict = {
+            "id": epic.id,
+            "title": epic.title,
+            "description": epic.description,
+            "project_id": epic.project_id,
+            "priority": epic.priority,
+            "progress": epic.progress,
+            "status": epic.status,
+            "goal": epic.goal,
+            "start_date": epic.start_date,
+            "target_date": epic.target_date,
+            "created_at": epic.created_at,
+            "updated_at": epic.updated_at,
+            "task_count": len(epic.task_assignments),
+        }
+        result.append(EpicResponse(**epic_dict))
+
+    return result

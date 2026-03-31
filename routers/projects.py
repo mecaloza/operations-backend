@@ -25,8 +25,7 @@ def list_projects(
 @router.get("/{project_id}", response_model=ProjectOut)
 def get_project(
     project_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     proj = db.query(Project).filter(Project.id == project_id).first()
     if not proj:
