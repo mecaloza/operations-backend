@@ -15,10 +15,9 @@ def list_users(
     skip: int = 0,
     limit: int = 100,
     active_only: bool = True,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin)
+    db: Session = Depends(get_db)
 ):
-    """Listar usuarios"""
+    """Lista todos los usuarios (público para dropdowns)"""
     query = db.query(User)
     if active_only:
         query = query.filter(User.active == True)
