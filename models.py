@@ -54,6 +54,15 @@ user_agent_association = Table(
     Column('agent_id', Integer, ForeignKey('agents.id'), primary_key=True)
 )
 
+# Tabla asociación M2M Transcript <-> Project
+transcript_projects = Table(
+    'transcript_projects',
+    Base.metadata,
+    Column('transcript_id', Integer, ForeignKey('transcripts.id', ondelete='CASCADE'), primary_key=True),
+    Column('project_id', Integer, ForeignKey('projects.id', ondelete='CASCADE'), primary_key=True),
+    Column('created_at', DateTime, default=lambda: datetime.now(timezone.utc))
+)
+
 
 class Project(Base):
     __tablename__ = "projects"
@@ -217,19 +226,64 @@ class Transcript(Base):
     content = Column(Text, nullable=False)  # Markdown del transcript
     task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
     epic_id = Column(Integer, ForeignKey("epics.id"), nullable=True)
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)  # Proyecto principal (compatibilidad)
     created_by = Column(String(200), nullable=False)  # Nombre del agente/usuario
     version = Column(Integer, default=1)
     is_latest = Column(Boolean, default=True)  # Solo última versión visible
     tags = Column(Text, default="")  # Comma-separated tags
     file_size = Column(Integer, default=0)  # Tamaño en bytes
+    source_type = Column(String(50), nullable=True, index=True)  # gmail, upload, manual, etc.
+    source_message_id = Column(String(500), nullable=True, index=True)  # RFC Message-ID
+    source_thread_id = Column(String(255), nullable=True, index=True)
+    source_dedup_key = Column(String(255), nullable=True, unique=True, index=True)
+    source_payload_json = Column(Text, nullable=True)  # Metadata de origen serializada
+    raw_email = Column(Text, nullable=True)  # Cuerpo raw/normalizado del email
+    transcript_full = Column(Text, nullable=True)  # Texto completo del transcript si existe
+    summary_full = Column(Text, nullable=True)  # Resumen/raw summary si existe
+    email_from = Column(String(500), nullable=True)
+    email_subject = Column(String(500), nullable=True)
+    email_received_at = Column(DateTime, nullable=True)
+    attachments_json = Column(Text, nullable=True)  # Snapshot serializado de attachments
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
-    project = relationship("Project", backref="transcripts")
+    # Relación al proyecto principal (existente)
+    project = relationship("Project", foreign_keys=[project_id], backref="transcripts")
+    
+    # Nueva relación M2M a múltiples proyectos
+    projects = relationship(
+        "Project",
+        secondary=transcript_projects,
+        backref="associated_transcripts"
+    )
+    
     task = relationship("Task", backref="transcripts")
     epic = relationship("Epic", backref="transcripts")
     versions = relationship("TranscriptVersion", back_populates="transcript", cascade="all, delete-orphan")
+    attachments = relationship("TranscriptAttachment", back_populates="transcript", cascade="all, delete-orphan")
+
+
+class TranscriptAttachment(Base):
+    __tablename__ = "transcript_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    transcript_id = Column(Integer, ForeignKey("transcripts.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename = Column(String(500), nullable=False)
+    content_type = Column(String(255), nullable=True)
+    size_bytes = Column(Integer, default=0)
+    attachment_role = Column(String(50), nullable=True, index=True)  # transcript, summary, image, other
+    storage_path = Column(String(1000), nullable=True)
+    content_text = Column(Text, nullable=True)
+    content_hash = Column(String(128), nullable=True, index=True)
+    is_inline = Column(Boolean, default=False)
+    attachment_metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    transcript = relationship("Transcript", back_populates="attachments")
+
+    __table_args__ = (
+        Index('idx_transcript_attachment_role', 'transcript_id', 'attachment_role'),
+    )
 
 
 class TranscriptVersion(Base):

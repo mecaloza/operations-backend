@@ -33,12 +33,15 @@ from email.utils import getaddresses, parsedate_to_datetime
 from pathlib import Path
 from typing import Iterable
 
+from sqlalchemy.orm import joinedload
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
 from database import SessionLocal
 from models import Project, Transcript, TranscriptAttachment
+from plaud_utils import clean_email_text, normalize_role, transcript_primary_text
 
 DEFAULT_GMAIL_ENV = Path("/Users/lukeskywalker/.openclaw/workspace/.secrets/gmail.env")
 DEFAULT_ATTACHMENT_DIR = Path(__file__).resolve().parent / "storage" / "plaud"
@@ -103,6 +106,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--attachment-dir", type=str, default=str(DEFAULT_ATTACHMENT_DIR), help="Directorio local para adjuntos")
     parser.add_argument("--message-id", type=str, default=None, help="Procesar un Message-ID específico")
     parser.add_argument("--include-non-plaud-sender", action="store_true", help="Acepta correos que parezcan Plaud aunque el sender no coincida exacto")
+    parser.add_argument("--reprocess-existing", action="store_true", help="Recalcula transcripts Plaud ya importados sin volver a leer Gmail")
     return parser.parse_args()
 
 
@@ -184,11 +188,7 @@ def sender_matches_plaud(message: Message, include_non_plaud_sender: bool = Fals
 
 
 def html_to_text(html: str) -> str:
-    text = re.sub(r"<br\s*/?>", "\n", html, flags=re.I)
-    text = re.sub(r"</p\s*>", "\n\n", text, flags=re.I)
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = text.replace("&nbsp;", " ").replace("&amp;", "&")
-    return normalize_whitespace(text) or ""
+    return clean_email_text(html) or ""
 
 
 def iter_message_parts(message: Message) -> Iterable[Message]:
@@ -281,7 +281,7 @@ def extract_attachments(message: Message, base_dir: Path, dedup_key: str, dry_ru
             continue
 
         name = filename or f"part-{len(items)+1}"
-        role = attachment_role(name, content_type)
+        role = normalize_role(attachment_role(name, content_type), name, content_type)
         ext = Path(name).suffix.lower()
         content_text = None
         if ext in TEXT_EXTENSIONS or (content_type or "").startswith("text/"):
@@ -318,27 +318,18 @@ def choose_text_by_role(attachments: list[ExtractedAttachment], role: str) -> st
 
 
 def build_markdown(title: str, subject: str | None, sender: str | None, received_at: datetime | None, body_text: str | None, summary_text: str | None, transcript_text: str | None, attachments: list[ExtractedAttachment]) -> str:
+    del subject, sender, received_at
     blocks = [f"# {title}"]
-    meta_lines = []
-    if subject:
-        meta_lines.append(f"**Subject:** {subject}")
-    if sender:
-        meta_lines.append(f"**From:** {sender}")
-    if received_at:
-        meta_lines.append(f"**Received At:** {received_at.isoformat()}")
-    if attachments:
-        meta_lines.append(f"**Attachments:** {len(attachments)}")
-    if meta_lines:
-        blocks.append("\n".join(meta_lines))
     if summary_text:
-        blocks.append("## Summary\n\n" + summary_text)
+        blocks.append("## Resumen\n\n" + summary_text)
     if transcript_text:
-        blocks.append("## Full Transcript\n\n" + transcript_text)
+        blocks.append("## Transcripción\n\n" + transcript_text)
     if body_text and body_text not in {summary_text, transcript_text}:
-        blocks.append("## Email Body\n\n" + body_text)
-    if attachments:
+        blocks.append("## Notas del correo\n\n" + body_text)
+    visible_attachments = [att for att in attachments if att.attachment_role not in {"summary", "transcript"}]
+    if visible_attachments:
         items = []
-        for att in attachments:
+        for att in visible_attachments:
             descriptor = f"- {att.filename}"
             if att.attachment_role:
                 descriptor += f" ({att.attachment_role})"
@@ -346,10 +337,8 @@ def build_markdown(title: str, subject: str | None, sender: str | None, received
                 descriptor += f" [{att.content_type}]"
             if att.size_bytes:
                 descriptor += f" - {att.size_bytes} bytes"
-            if att.storage_path:
-                descriptor += f" - `{att.storage_path}`"
             items.append(descriptor)
-        blocks.append("## Attachments\n\n" + "\n".join(items))
+        blocks.append("## Adjuntos\n\n" + "\n".join(items))
     return "\n\n".join(block for block in blocks if block).strip()
 
 
@@ -358,15 +347,15 @@ def extract_email_record(message: Message, attachment_dir: Path, dry_run: bool) 
     sender = extract_sender(message)
     received_at = parse_received_at(message)
     body_plain, body_html = extract_body_text(message)
-    raw_email = body_plain or body_html
+    raw_email = clean_email_text(body_plain or body_html)
     message_id = decode_mime(message.get("Message-ID")) or None
     thread_key = decode_mime(message.get("X-GM-THRID")) or None
     dedup_key = build_dedup_key(message_id, subject, received_at, raw_email)
     attachments = extract_attachments(message, attachment_dir, dedup_key, dry_run=dry_run)
-    summary_full = choose_text_by_role(attachments, "summary")
-    transcript_full = choose_text_by_role(attachments, "transcript")
+    summary_full = clean_email_text(choose_text_by_role(attachments, "summary"))
+    transcript_full = clean_email_text(choose_text_by_role(attachments, "transcript"))
 
-    body_for_content = body_plain or body_html
+    body_for_content = clean_email_text(body_plain or body_html)
     if not summary_full and body_for_content:
         summary_full = body_for_content
     if not transcript_full and body_for_content:
@@ -508,9 +497,9 @@ def sync_transcript(record: ExtractedEmail, dry_run: bool, attachment_dir: Path)
             transcript.project_id = project_objs[0].id
 
         transcript.source_payload_json = json.dumps(record.source_payload, ensure_ascii=False)
-        transcript.raw_email = record.raw_email
-        transcript.transcript_full = record.transcript_full
-        transcript.summary_full = record.summary_full
+        transcript.raw_email = clean_email_text(record.raw_email)
+        transcript.transcript_full = clean_email_text(record.transcript_full)
+        transcript.summary_full = clean_email_text(record.summary_full)
         transcript.email_from = record.email_from
         transcript.email_subject = record.email_subject
         transcript.email_received_at = record.email_received_at
@@ -553,13 +542,60 @@ def sync_transcript(record: ExtractedEmail, dry_run: bool, attachment_dir: Path)
             if stale.content_hash and stale.content_hash not in seen_hashes:
                 db.delete(stale)
 
+        transcript.content = transcript_primary_text(transcript)
+        transcript.file_size = len(transcript.content.encode("utf-8"))
+
         db.commit()
         return action, record.title
     finally:
         db.close()
 
 
+def reprocess_existing_transcripts(dry_run: bool = False) -> None:
+    db = SessionLocal()
+    stats = {"reprocessed": 0}
+    try:
+        transcripts = db.query(Transcript).options(joinedload(Transcript.attachments)).filter(
+            Transcript.source_type == "gmail"
+        ).all()
+        for transcript in transcripts:
+            transcript.summary_full = clean_email_text(transcript.summary_full)
+            transcript.transcript_full = clean_email_text(transcript.transcript_full)
+            transcript.raw_email = clean_email_text(transcript.raw_email)
+            if transcript.attachments_json:
+                try:
+                    snapshot = json.loads(transcript.attachments_json)
+                except json.JSONDecodeError:
+                    snapshot = []
+                normalized = []
+                for item in snapshot:
+                    normalized.append({
+                        **item,
+                        "attachment_role": normalize_role(item.get("attachment_role"), item.get("filename"), item.get("content_type")),
+                    })
+                transcript.attachments_json = json.dumps(normalized, ensure_ascii=False)
+            for attachment in transcript.attachments:
+                attachment.attachment_role = normalize_role(attachment.attachment_role, attachment.filename, attachment.content_type)
+                attachment.content_text = clean_email_text(attachment.content_text)
+            transcript.content = transcript_primary_text(transcript)
+            transcript.file_size = len(transcript.content.encode("utf-8"))
+            stats["reprocessed"] += 1
+        if dry_run:
+            db.rollback()
+        else:
+            db.commit()
+    finally:
+        db.close()
+    print(json.dumps(stats, indent=2, ensure_ascii=False))
+    if dry_run:
+        print("DRY-RUN: no se escribieron cambios en DB")
+
+
 def process_mailbox(args: argparse.Namespace) -> None:
+    if args.reprocess_existing:
+        reprocess_existing_transcripts(dry_run=args.dry_run)
+        return
+
     env_file = Path(args.env_file)
     attachment_dir = Path(args.attachment_dir)
     if not args.dry_run:

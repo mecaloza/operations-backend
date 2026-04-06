@@ -57,6 +57,7 @@ open http://localhost:8000/docs
 - **[Developer Guide](./docs/DEVELOPER_GUIDE.md)**: Setup local, estructura del proyecto, deploy
 - **[Schemas](./docs/SCHEMAS.md)**: Modelos de datos, validaciones y relaciones
 - **[Examples](./docs/EXAMPLES.md)**: Ejemplos de curl para todos los flujos
+- **[Plaud Import](./docs/PLAUD_IMPORT.md)**: Backfill Gmail/IMAP para transcripts de Plaud AI
 
 ### Para Agentes AI
 

@@ -1,32 +1,37 @@
 import io
 import json
+import mimetypes
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from database import get_db
 from models import Epic, Project, Task, Transcript, TranscriptAttachment, TranscriptVersion, User
+from plaud_utils import attachment_public_payload, transcript_display_summary, transcript_primary_text
+from routers.auth import get_current_user
 from schemas import (
-    TranscriptAttachmentOut,
     TranscriptCreate,
     TranscriptOut,
     TranscriptProjectUpdate,
     TranscriptUpdate,
     TranscriptVersionOut,
 )
-from routers.auth import get_current_user
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
 
 
 def _serialize_transcript(transcript: Transcript) -> TranscriptOut:
+    attachments_payload = [attachment_public_payload(transcript.id, attachment) for attachment in transcript.attachments]
     payload = {
         "id": transcript.id,
         "title": transcript.title,
         "content": transcript.content,
+        "display_content": transcript_primary_text(transcript),
+        "display_summary": transcript_display_summary(transcript),
         "task_id": transcript.task_id,
         "epic_id": transcript.epic_id,
         "project_id": transcript.project_id,
@@ -49,22 +54,10 @@ def _serialize_transcript(transcript: Transcript) -> TranscriptOut:
         "email_subject": transcript.email_subject,
         "email_received_at": transcript.email_received_at,
         "attachments_json": (json.loads(transcript.attachments_json) if transcript.attachments_json else None),
-        "attachments": [
-            {
-                "id": attachment.id,
-                "filename": attachment.filename,
-                "content_type": attachment.content_type,
-                "size_bytes": attachment.size_bytes or 0,
-                "attachment_role": attachment.attachment_role,
-                "storage_path": attachment.storage_path,
-                "content_text": attachment.content_text,
-                "content_hash": attachment.content_hash,
-                "is_inline": attachment.is_inline,
-                "attachment_metadata": (json.loads(attachment.attachment_metadata_json) if attachment.attachment_metadata_json else None),
-                "created_at": attachment.created_at,
-            }
-            for attachment in transcript.attachments
-        ],
+        "attachments": attachments_payload,
+        "image_attachments": [attachment for attachment in attachments_payload if attachment["attachment_role"] == "image"],
+        "summary_attachments": [attachment for attachment in attachments_payload if attachment["attachment_role"] == "summary"],
+        "transcript_attachments": [attachment for attachment in attachments_payload if attachment["attachment_role"] == "transcript"],
         "created_at": transcript.created_at,
         "updated_at": transcript.updated_at,
         "related_task": transcript.task,
@@ -74,12 +67,8 @@ def _serialize_transcript(transcript: Transcript) -> TranscriptOut:
 
 
 def _validate_transcript_data(data: TranscriptCreate, db: Session):
-    """Valida datos de transcript antes de crear"""
     if not data.task_id and not data.epic_id:
-        raise HTTPException(
-            status_code=400,
-            detail="Al menos uno de task_id o epic_id debe estar presente"
-        )
+        raise HTTPException(status_code=400, detail="Al menos uno de task_id o epic_id debe estar presente")
 
     project = db.query(Project).filter(Project.id == data.project_id).first()
     if not project:
@@ -111,7 +100,6 @@ def list_transcripts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Lista transcripts con filtros opcionales"""
     query = db.query(Transcript).filter(Transcript.is_latest == True)
 
     if project_id:
@@ -141,10 +129,7 @@ def create_transcript(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Crea un nuevo transcript"""
     _validate_transcript_data(data, db)
-
-    file_size = len(data.content.encode("utf-8"))
 
     transcript = Transcript(
         title=data.title,
@@ -154,7 +139,7 @@ def create_transcript(
         project_id=data.project_id,
         created_by=data.created_by,
         tags=data.tags or "",
-        file_size=file_size,
+        file_size=len(data.content.encode("utf-8")),
         version=1,
         is_latest=True,
         source_type=data.source_type,
@@ -201,7 +186,6 @@ def get_transcript(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Obtiene detalle de un transcript"""
     transcript = db.query(Transcript).options(
         joinedload(Transcript.task),
         joinedload(Transcript.epic),
@@ -227,7 +211,6 @@ def update_transcript(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Actualiza transcript (crea nueva versión automáticamente)"""
     transcript = db.query(Transcript).options(
         joinedload(Transcript.projects),
         joinedload(Transcript.attachments),
@@ -300,7 +283,6 @@ def update_transcript_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Actualiza proyectos asociados a un transcript (M2M)"""
     transcript = db.query(Transcript).options(
         joinedload(Transcript.projects),
         joinedload(Transcript.attachments),
@@ -335,7 +317,6 @@ def delete_transcript(
 
     transcript.is_latest = False
     db.commit()
-
     return {"message": "Transcript marcado como eliminado"}
 
 
@@ -349,11 +330,9 @@ def get_transcript_versions(
     if not transcript:
         raise HTTPException(status_code=404, detail="Transcript no encontrado")
 
-    versions = db.query(TranscriptVersion).filter(
+    return db.query(TranscriptVersion).filter(
         TranscriptVersion.transcript_id == transcript_id
     ).order_by(TranscriptVersion.version.desc()).all()
-
-    return versions
 
 
 @router.get("/{transcript_id}/download")
@@ -375,7 +354,7 @@ def download_transcript(
     content += f"**Versión:** {transcript.version}\n"
     content += f"**Tags:** {transcript.tags}\n\n"
     content += "---\n\n"
-    content += transcript.content
+    content += transcript_primary_text(transcript)
 
     file_stream = io.BytesIO(content.encode("utf-8"))
     filename = f"transcript_{transcript.id}_{transcript.title[:30].replace(' ', '_')}.md"
@@ -385,6 +364,47 @@ def download_transcript(
         media_type="text/markdown",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/{transcript_id}/attachments/{attachment_id}")
+def get_transcript_attachment(
+    transcript_id: int,
+    attachment_id: int,
+    disposition: str = Query(default="attachment", pattern="^(attachment|inline)$"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    attachment = db.query(TranscriptAttachment).join(Transcript).filter(
+        Transcript.id == transcript_id,
+        Transcript.is_latest == True,
+        TranscriptAttachment.id == attachment_id,
+        TranscriptAttachment.transcript_id == transcript_id,
+    ).first()
+
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Adjunto no encontrado")
+
+    if attachment.storage_path:
+        file_path = Path(attachment.storage_path)
+        if file_path.exists() and file_path.is_file():
+            media_type = attachment.content_type or mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+            return FileResponse(
+                path=str(file_path),
+                media_type=media_type,
+                filename=attachment.filename,
+                headers={"Content-Disposition": f'{disposition}; filename="{attachment.filename}"'},
+            )
+
+    if attachment.content_text is not None:
+        media_type = attachment.content_type or "text/plain; charset=utf-8"
+        file_stream = io.BytesIO(attachment.content_text.encode("utf-8"))
+        return StreamingResponse(
+            file_stream,
+            media_type=media_type,
+            headers={"Content-Disposition": f'{disposition}; filename="{attachment.filename}"'},
+        )
+
+    raise HTTPException(status_code=404, detail="Adjunto sin archivo disponible")
 
 
 @router.post("/upload", response_model=TranscriptOut, status_code=201)
@@ -479,9 +499,7 @@ def get_project_transcripts(
         joinedload(Transcript.epic),
         joinedload(Transcript.projects),
         joinedload(Transcript.attachments),
-    ).join(
-        Transcript.projects
-    ).filter(
+    ).join(Transcript.projects).filter(
         Project.id == project_id,
         Transcript.is_latest == True,
     ).distinct().all()

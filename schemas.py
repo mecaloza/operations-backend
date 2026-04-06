@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, date
-from typing import Optional, List
+from typing import Any, Optional, List
 
 
 # --- Project ---
@@ -225,6 +225,28 @@ class AgentTaskQuery(BaseModel):
 
 
 # --- Transcript ---
+class TranscriptAttachmentBase(BaseModel):
+    filename: str
+    content_type: Optional[str] = None
+    size_bytes: int = 0
+    attachment_role: Optional[str] = None
+    storage_path: Optional[str] = None
+    content_text: Optional[str] = None
+    content_hash: Optional[str] = None
+    is_inline: bool = False
+    attachment_metadata: Optional[dict[str, Any]] = None
+
+
+class TranscriptAttachmentOut(TranscriptAttachmentBase):
+    id: int
+    download_url: Optional[str] = None
+    preview_url: Optional[str] = None
+    is_previewable: bool = False
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class TranscriptCreate(BaseModel):
     title: str
     content: str
@@ -233,26 +255,66 @@ class TranscriptCreate(BaseModel):
     project_id: int
     created_by: str
     tags: Optional[str] = ""
+    source_type: Optional[str] = None
+    source_message_id: Optional[str] = None
+    source_thread_id: Optional[str] = None
+    source_dedup_key: Optional[str] = None
+    source_payload: Optional[dict[str, Any]] = None
+    raw_email: Optional[str] = None
+    transcript_full: Optional[str] = None
+    summary_full: Optional[str] = None
+    email_from: Optional[str] = None
+    email_subject: Optional[str] = None
+    email_received_at: Optional[datetime] = None
+    attachments_json: Optional[list[dict[str, Any]]] = None
 
 
 class TranscriptUpdate(BaseModel):
     title: Optional[str] = None
     content: Optional[str] = None
     tags: Optional[str] = None
+    source_payload: Optional[dict[str, Any]] = None
+    raw_email: Optional[str] = None
+    transcript_full: Optional[str] = None
+    summary_full: Optional[str] = None
+    email_from: Optional[str] = None
+    email_subject: Optional[str] = None
+    email_received_at: Optional[datetime] = None
+    attachments_json: Optional[list[dict[str, Any]]] = None
 
 
 class TranscriptOut(BaseModel):
     id: int
     title: str
     content: str
+    display_content: Optional[str] = None
+    display_summary: Optional[str] = None
     task_id: Optional[int]
     epic_id: Optional[int]
-    project_id: int
+    project_id: int  # Proyecto principal
+    project_ids: List[int] = Field(default_factory=list)  # Todos los proyectos asociados (M2M)
+    project_names: List[str] = Field(default_factory=list)  # Nombres para UI
     created_by: str
     version: int
     is_latest: bool
     tags: str
-    file_size: int
+    file_size: Optional[int] = 0  # Nullable para registros legacy
+    source_type: Optional[str] = None
+    source_message_id: Optional[str] = None
+    source_thread_id: Optional[str] = None
+    source_dedup_key: Optional[str] = None
+    source_payload: Optional[dict[str, Any]] = None
+    raw_email: Optional[str] = None
+    transcript_full: Optional[str] = None
+    summary_full: Optional[str] = None
+    email_from: Optional[str] = None
+    email_subject: Optional[str] = None
+    email_received_at: Optional[datetime] = None
+    attachments_json: Optional[list[dict[str, Any]]] = None
+    attachments: List["TranscriptAttachmentOut"] = Field(default_factory=list)
+    image_attachments: List["TranscriptAttachmentOut"] = Field(default_factory=list)
+    summary_attachments: List["TranscriptAttachmentOut"] = Field(default_factory=list)
+    transcript_attachments: List["TranscriptAttachmentOut"] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     related_task: Optional["TaskOut"] = None
@@ -279,6 +341,11 @@ class TranscriptQuery(BaseModel):
     epic_id: Optional[int] = None
     tags: Optional[str] = None
     created_by: Optional[str] = None
+
+
+class TranscriptProjectUpdate(BaseModel):
+    """Schema para actualizar proyectos asociados a un transcript"""
+    project_ids: List[int]  # Lista completa de IDs (reemplaza existentes)
 
 
 # --- Team ---
